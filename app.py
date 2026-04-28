@@ -208,21 +208,32 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ── Sidebar ───────────────────────────────────────────────────────────────────
+# ── Auto-load API key from Streamlit Secrets if available ────────────────────
+_secret_key = ""
+try:
+    _secret_key = st.secrets.get("OPENAI_API_KEY", "")
+except Exception:
+    pass
+
 with st.sidebar:
     st.markdown("### ✦ Ad Draft Generator")
     st.markdown("---")
-    st.markdown("**OpenAI API Key**")
-    api_key = st.text_input(
-        "API Key",
-        type="password",
-        placeholder="sk-...",
-        label_visibility="collapsed",
-        help="Your key is used only for this session and never stored.",
-    )
-    if api_key:
-        st.success("API key set ✓", icon="🔑")
+    if _secret_key:
+        api_key = _secret_key
+        st.success("API key configured ✓", icon="🔑")
     else:
-        st.info("Enter your OpenAI API key to get started.", icon="ℹ️")
+        st.markdown("**OpenAI API Key**")
+        api_key = st.text_input(
+            "API Key",
+            type="password",
+            placeholder="sk-...",
+            label_visibility="collapsed",
+            help="Your key is used only for this session and never stored.",
+        )
+        if api_key:
+            st.success("API key set ✓", icon="🔑")
+        else:
+            st.info("Enter your OpenAI API key to get started.", icon="ℹ️")
 
     st.markdown("---")
     st.markdown("**How it works**")

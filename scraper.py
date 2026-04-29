@@ -44,7 +44,17 @@ PREFER_PATTERNS = [
     ]
 ]
 
-# ── Promo link detection ──────────────────────────────────────────────────────
+# ── Landing page candidate patterns ─────────────────────────────────
+LANDING_HREF_PATTERNS = [
+    (re.compile(r"/(pricing|plans|packages|subscription)", re.I), 10, "pricing"),
+    (re.compile(r"/(get-started|start|signup|sign-up|register|free-trial|trial|create)", re.I), 9, "signup"),
+    (re.compile(r"/(product|products|solution|solutions|platform|service|services|ads|advertise|advertising)", re.I), 8, "product"),
+    (re.compile(r"/(features|capabilities|how-it-works|overview|learn)", re.I), 7, "features"),
+    (re.compile(r"/(landing|campaign|lp)/", re.I), 6, "landing"),
+    (re.compile(r"/(about|company|why-us)", re.I), 3, "about"),
+]
+
+# ── Promo link detection ────────────────────────────────────────────
 PROMO_HREF_RE = re.compile(
     r"/(promo|promotion|promotions|offer|offers|deal|deals|sale|sales|"
     r"discount|discounts|coupon|coupons|special|specials|campaign|campaigns|"
@@ -100,6 +110,13 @@ class PromoContent:
 
 
 @dataclass
+class LandingPageCandidate:
+    url: str
+    label: str   # "promo" | "pricing" | "product" | "features" | "signup" | "about" | "homepage"
+    score: int
+
+
+@dataclass
 class ScrapedContent:
     url: str
     title: str
@@ -114,6 +131,7 @@ class ScrapedContent:
     og_description: Optional[str] = None
     favicon_url: Optional[str] = None
     promo: Optional[PromoContent] = None
+    landing_page_candidates: list["LandingPageCandidate"] = field(default_factory=list)
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
@@ -240,6 +258,70 @@ def discover_promo_links(soup: BeautifulSoup, base_url: str) -> list[str]:
     return [url for url, _ in candidates[:3]]
 
 
+def discover_landing_pages(
+    soup: BeautifulSoup, base_url: str, promo_url: Optional[str] = None
+) -> list[LandingPageCandidate]:
+    """Discover and rank candidate landing pages from homepage links.
+    Falls back to cross-domain links for SPA sites with few internal links.
+    """
+    base_host = urlparse(base_url).hostname
+    candidates: list[LandingPageCandidate] = []
+    seen: set[str] = set()
+
+    # Promo page is always the top candidate if detected
+    if promo_url:
+        candidates.append(LandingPageCandidate(url=promo_url, label="promo", score=12))
+        seen.add(promo_url)
+
+    # Collect all links (same-domain first, then cross-domain as fallback)
+    all_links: list[str] = []
+    cross_domain_links: list[str] = []
+    for a in soup.find_all("a", href=True):
+        href = a["href"]
+        resolved = resolve_url(href, base_url)
+        if not resolved or resolved in seen:
+            continue
+        try:
+            parsed = urlparse(resolved)
+            if parsed.path in ("/", ""):
+                continue
+            if parsed.hostname == base_host:
+                all_links.append(resolved)
+            elif parsed.scheme in ("http", "https"):
+                cross_domain_links.append(resolved)
+        except Exception:
+            continue
+
+    # Score same-domain links against patterns
+    for resolved in all_links:
+        if resolved in seen:
+            continue
+        for pattern, score, label in LANDING_HREF_PATTERNS:
+            if pattern.search(resolved):
+                candidates.append(LandingPageCandidate(url=resolved, label=label, score=score))
+                seen.add(resolved)
+                break
+
+    # If very few same-domain candidates found (SPA site), also score cross-domain links
+    if len(candidates) < 2:
+        for resolved in cross_domain_links:
+            if resolved in seen:
+                continue
+            for pattern, score, label in LANDING_HREF_PATTERNS:
+                if pattern.search(resolved):
+                    # Slightly lower score for cross-domain
+                    candidates.append(LandingPageCandidate(url=resolved, label=label, score=max(1, score - 2)))
+                    seen.add(resolved)
+                    break
+
+    # Always include homepage as final fallback
+    if base_url not in seen:
+        candidates.append(LandingPageCandidate(url=base_url, label="homepage", score=1))
+
+    candidates.sort(key=lambda c: c.score, reverse=True)
+    return candidates[:5]
+
+
 def scrape_promo_page(promo_url: str) -> Optional[PromoContent]:
     html, status = fetch_html(promo_url, timeout=12)
     if not html:
@@ -353,8 +435,9 @@ def scrape_website(url: str) -> ScrapedContent:
     images.extend(extract_images(soup, url, seen_srcs))
     images = sorted(images, key=lambda i: i.score, reverse=True)[:20]
 
-    # Promo discovery — use original HTML (with nav) for link scanning
+    # Promo + landing page discovery — use original HTML (with nav) for link scanning
     promo: Optional[PromoContent] = None
+    landing_page_candidates: list[LandingPageCandidate] = []
     try:
         full_soup = BeautifulSoup(html, "html.parser")
         promo_links = discover_promo_links(full_soup, url)
@@ -363,6 +446,8 @@ def scrape_website(url: str) -> ScrapedContent:
             if result:
                 promo = result
                 break
+        # Discover general landing page candidates
+        landing_page_candidates = discover_landing_pages(full_soup, url, promo.promo_url if promo else None)
     except Exception:
         pass
 
@@ -380,4 +465,5 @@ def scrape_website(url: str) -> ScrapedContent:
         og_description=og_description,
         favicon_url=favicon_url,
         promo=promo,
+        landing_page_candidates=landing_page_candidates,
     )

@@ -18,6 +18,8 @@ class AdVariant:
     cta: str
     image_url: str
     image_source: str    # "scraped" | "none"
+    landing_page_url: Optional[str] = None   # recommended landing page for this format
+    landing_page_label: Optional[str] = None # e.g. "promo", "pricing", "product", "homepage"
 
 
 @dataclass
@@ -187,6 +189,19 @@ def generate_ad_drafts(api_key: str, scraped: ScrapedContent) -> GeneratedAdResu
         selected_image = scraped.og_image
         image_source = "scraped"
 
+    # Assign landing pages per format
+    lp = scraped.landing_page_candidates
+    promo_lp = next((c for c in lp if c.label == "promo"), None)
+    pricing_lp = next((c for c in lp if c.label in ("pricing", "signup")), None)
+    product_lp = next((c for c in lp if c.label in ("product", "features")), None)
+    fallback_lp = lp[0] if lp else None
+
+    format_landing = {
+        "social": promo_lp or product_lp or fallback_lp,
+        "display": promo_lp or product_lp or fallback_lp,
+        "search": pricing_lp or promo_lp or fallback_lp,
+    }
+
     formats = ["social", "display", "search"]
     variants = [
         AdVariant(
@@ -196,6 +211,8 @@ def generate_ad_drafts(api_key: str, scraped: ScrapedContent) -> GeneratedAdResu
             cta=ad_copy.get(fmt, {}).get("cta", ""),
             image_url=selected_image,
             image_source=image_source,
+            landing_page_url=format_landing[fmt].url if format_landing[fmt] else None,
+            landing_page_label=format_landing[fmt].label if format_landing[fmt] else None,
         )
         for fmt in formats
     ]

@@ -419,6 +419,27 @@ if generate_clicked:
   <span style="color:#94a3b8;font-size:0.85rem;">No image available</span>
 </div>""", unsafe_allow_html=True)
 
+            # Landing page snippet
+            lp_html = ""
+            if variant.landing_page_url:
+                lp_label_badge = {
+                    "promo": ("#f59e0b", "#fffbeb", "Promo"),
+                    "pricing": ("#6366f1", "#eef2ff", "Pricing"),
+                    "signup": ("#10b981", "#ecfdf5", "Sign Up"),
+                    "product": ("#3b82f6", "#eff6ff", "Product"),
+                    "features": ("#8b5cf6", "#f5f3ff", "Features"),
+                    "homepage": ("#64748b", "#f8fafc", "Homepage"),
+                }.get(variant.landing_page_label or "", ("#64748b", "#f8fafc", variant.landing_page_label or "Page"))
+                lp_color, lp_bg, lp_name = lp_label_badge
+                display_url = variant.landing_page_url.replace("https://", "").replace("http://", "")
+                if len(display_url) > 50:
+                    display_url = display_url[:47] + "..."
+                lp_html = f"""
+  <div style="margin-top:0.75rem; padding:0.5rem 0.75rem; background:{lp_bg}; border-radius:8px; border:1px solid {lp_color}22; display:flex; align-items:center; gap:0.5rem;">
+    <span style="font-size:0.65rem; font-weight:700; text-transform:uppercase; letter-spacing:0.05em; color:{lp_color}; background:{lp_color}18; padding:2px 6px; border-radius:4px;">{lp_name}</span>
+    <a href="{variant.landing_page_url}" target="_blank" style="font-size:0.75rem; color:{lp_color}; text-decoration:none; font-weight:500; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;" title="{variant.landing_page_url}">{display_url} ↗</a>
+  </div>"""
+
             # Card content
             st.markdown(f"""
 <div class="ad-card">
@@ -430,12 +451,14 @@ if generate_clicked:
     <div class="ad-headline">{variant.headline}</div>
     <div class="ad-body-text">{variant.body}</div>
     <span class="ad-cta">{variant.cta}</span>
+    {lp_html}
   </div>
 </div>
 """, unsafe_allow_html=True)
 
             # Copy button
-            copy_text = f"{meta['label']} Ad\nHeadline: {variant.headline}\nBody: {variant.body}\nCTA: {variant.cta}"
+            lp_line = f"\nLanding Page: {variant.landing_page_url}" if variant.landing_page_url else ""
+            copy_text = f"{meta['label']} Ad\nHeadline: {variant.headline}\nBody: {variant.body}\nCTA: {variant.cta}{lp_line}"
             st.download_button(
                 label=f"⬇ Download {meta['label']}",
                 data=copy_text,
@@ -446,9 +469,12 @@ if generate_clicked:
             )
 
             all_copy_text += f"── {meta['label'].upper()} AD ({meta['dims']}) ──\n"
-            all_copy_text += f"Headline: {variant.headline}\n"
-            all_copy_text += f"Body:     {variant.body}\n"
-            all_copy_text += f"CTA:      {variant.cta}\n\n"
+            all_copy_text += f"Headline:     {variant.headline}\n"
+            all_copy_text += f"Body:         {variant.body}\n"
+            all_copy_text += f"CTA:          {variant.cta}\n"
+            if variant.landing_page_url:
+                all_copy_text += f"Landing Page: {variant.landing_page_url}\n"
+            all_copy_text += "\n"
 
     # ── Download all ──────────────────────────────────────────────────────────
     st.markdown("---")

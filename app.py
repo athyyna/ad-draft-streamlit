@@ -513,10 +513,22 @@ if generate_clicked:
     utm_col1, utm_col2 = st.columns([1, 1])
     with utm_col1:
         utm_campaign = st.text_input(
-            "utm_campaign",
+            "utm_campaign *",
             value=result.company_name.lower().replace(" ", "_")[:40] if result.company_name else "brand_awareness",
             placeholder="brand_awareness_2026",
             key="utm_campaign",
+        )
+        utm_source = st.text_input(
+            "utm_source * (overrides format default)",
+            value="",
+            placeholder="meta / google / linkedin (leave blank for format default)",
+            key="utm_source",
+        )
+        utm_medium = st.text_input(
+            "utm_medium * (overrides format default)",
+            value="",
+            placeholder="paid_social / cpc / display (leave blank for format default)",
+            key="utm_medium",
         )
         utm_content = st.text_input(
             "utm_content (optional)",
@@ -564,7 +576,9 @@ if generate_clicked:
             for fmt in ["social", "display", "search"]:
                 defaults = FORMAT_UTM_DEFAULTS[fmt]
                 base = lp_by_format.get(fmt) or ""
-                url = build_utm_url(base, defaults["source"], defaults["medium"], utm_campaign, utm_content, utm_term if fmt == "search" else "")
+                src = utm_source.strip() or defaults["source"]
+                med = utm_medium.strip() or defaults["medium"]
+                url = build_utm_url(base, src, med, utm_campaign, utm_content, utm_term if fmt == "search" else "")
                 label_map = {"social": "📱 Social", "display": "🖥 Display", "search": "🔍 Search"}
                 if url:
                     st.markdown(f"**{label_map[fmt]}** (`{defaults['source']}` / `{defaults['medium']}`):")

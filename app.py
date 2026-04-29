@@ -498,6 +498,90 @@ if generate_clicked:
                 " · ".join(f"`{b}`" for b in result.key_benefits[:3])
             )
 
+    # ── UTM Parameter Builder ─────────────────────────────────────────────────
+    st.markdown("---")
+    st.markdown("### 🔗 UTM Parameter Builder")
+    st.markdown(
+        "Build tracking URLs for each ad format — ready to paste into Ads Manager. "
+        "Parameters are auto-filled with smart defaults per format."
+    )
+
+    # Collect landing pages per format
+    lp_by_format = {v.format: v.landing_page_url for v in result.variants}
+    has_any_lp = any(lp_by_format.values())
+
+    utm_col1, utm_col2 = st.columns([1, 1])
+    with utm_col1:
+        utm_campaign = st.text_input(
+            "utm_campaign",
+            value=result.company_name.lower().replace(" ", "_")[:40] if result.company_name else "brand_awareness",
+            placeholder="brand_awareness_2026",
+            key="utm_campaign",
+        )
+        utm_content = st.text_input(
+            "utm_content (optional)",
+            value="",
+            placeholder="social_v1 / display_v2",
+            key="utm_content",
+        )
+        utm_term = st.text_input(
+            "utm_term (optional, search only)",
+            value="",
+            placeholder="keyword phrase",
+            key="utm_term",
+        )
+
+    with utm_col2:
+        # Format-specific defaults
+        FORMAT_UTM_DEFAULTS = {
+            "social":  {"source": "meta",   "medium": "paid_social"},
+            "display": {"source": "google", "medium": "display"},
+            "search":  {"source": "google", "medium": "cpc"},
+        }
+
+        def build_utm_url(base_url: str, source: str, medium: str, campaign: str, content: str = "", term: str = "") -> str:
+            if not base_url:
+                return ""
+            try:
+                from urllib.parse import urlparse, urlencode, urlunparse, parse_qs
+                parsed = urlparse(base_url)
+                from urllib.parse import parse_qsl
+                qp = dict(parse_qsl(parsed.query))
+                if source:   qp["utm_source"]   = source
+                if medium:   qp["utm_medium"]   = medium
+                if campaign: qp["utm_campaign"] = campaign
+                if content:  qp["utm_content"]  = content
+                if term:     qp["utm_term"]     = term
+                new_query = urlencode(qp)
+                return urlunparse(parsed._replace(query=new_query))
+            except Exception:
+                return base_url
+
+        if not has_any_lp:
+            st.info("No landing pages were detected for this site. Generate ads from a URL with product/pricing/promo pages for best results.")
+        else:
+            utm_urls_text = "UTM TRACKING URLS\n\n"
+            for fmt in ["social", "display", "search"]:
+                defaults = FORMAT_UTM_DEFAULTS[fmt]
+                base = lp_by_format.get(fmt) or ""
+                url = build_utm_url(base, defaults["source"], defaults["medium"], utm_campaign, utm_content, utm_term if fmt == "search" else "")
+                label_map = {"social": "📱 Social", "display": "🖥 Display", "search": "🔍 Search"}
+                if url:
+                    st.markdown(f"**{label_map[fmt]}** (`{defaults['source']}` / `{defaults['medium']}`):")
+                    st.code(url, language=None)
+                    utm_urls_text += f"── {fmt.upper()} ──\n{url}\n\n"
+                else:
+                    st.markdown(f"**{label_map[fmt]}**: _No landing page detected_")
+
+            st.download_button(
+                label="⬇ Download All UTM URLs (.txt)",
+                data=utm_urls_text,
+                file_name=f"utm_urls_{utm_campaign}.txt",
+                mime="text/plain",
+                use_container_width=True,
+                key="dl_utm",
+            )
+
     # ── Scraped assets expander ───────────────────────────────────────────────
     with st.expander("🔍 View scraped assets used"):
         c1, c2 = st.columns(2)
